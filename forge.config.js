@@ -39,7 +39,7 @@ module.exports = {
       config: {
         repository: {
           owner: 'venkat-3010', // TODO: Replace with your GitHub username
-          name: 'new-electron-crud-poc',
+          name: 'electron-new',
         },
         prerelease: false,
         draft: true,
