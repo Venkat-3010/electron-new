@@ -8,4 +8,10 @@ module.exports = {
   module: {
     rules: require('./webpack.rules'),
   },
+  // Native modules must be externalized - webpack can't bundle them
+  externals: {
+    keytar: 'commonjs keytar',
+    sqlite3: 'commonjs sqlite3',
+    tedious: 'commonjs tedious',
+  },
 };

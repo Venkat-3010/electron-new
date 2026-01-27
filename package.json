@@ -10,7 +10,10 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
-    "lint": "echo \"No linting configured\""
+    "lint": "echo \"No linting configured\"",
+    "release:patch": "npm version patch && git push && git push --tags",
+    "release:minor": "npm version minor && git push && git push --tags",
+    "release:major": "npm version major && git push && git push --tags"
   },
   "keywords": [],
   "author": {
@@ -29,6 +32,7 @@
     "@electron-forge/plugin-auto-unpack-natives": "^7.11.1",
     "@electron-forge/plugin-fuses": "^7.11.1",
     "@electron-forge/plugin-webpack": "^7.11.1",
+    "@electron-forge/publisher-github": "^7.11.1",
     "@electron/fuses": "^1.8.0",
     "@vercel/webpack-asset-relocator-loader": "^1.7.3",
     "babel-loader": "^10.0.0",
@@ -43,6 +47,8 @@
     "@azure/msal-node-extensions": "^5.0.2",
     "dotenv": "^17.2.3",
     "electron-squirrel-startup": "^1.0.1",
+    "electron-updater": "^6.7.3",
+    "keytar": "^7.9.0",
     "moment": "^2.30.1",
     "primereact": "^10.9.7",
     "react": "^19.2.3",

@@ -4,6 +4,8 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 module.exports = {
   packagerConfig: {
     asar: true,
+    // Bundle .env file with the app (for production)
+    extraResource: ['.env'],
     // Register custom protocol for OAuth redirect
     protocols: [
       {
@@ -29,6 +31,19 @@ module.exports = {
     {
       name: '@electron-forge/maker-rpm',
       config: {},
+    },
+  ],
+  publishers: [
+    {
+      name: '@electron-forge/publisher-github',
+      config: {
+        repository: {
+          owner: 'venkat-3010', // TODO: Replace with your GitHub username
+          name: 'new-electron-crud-poc',
+        },
+        prerelease: false,
+        draft: true,
+      },
     },
   ],
   plugins: [
