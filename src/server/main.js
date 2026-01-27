@@ -143,13 +143,24 @@ const createWindow = () => {
     mainWindow = new BrowserWindow({
         width: 800,
         height: 600,
+        show: true, // Explicitly show the window
         webPreferences: {
             preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
         },
     });
 
+    console.log('Loading URL:', MAIN_WINDOW_WEBPACK_ENTRY);
     mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
-    mainWindow.webContents.openDevTools();
+
+    // Only open DevTools in development
+    if (process.env.NODE_ENV === 'development') {
+        mainWindow.webContents.openDevTools();
+    }
+
+    // Log any loading errors
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+        console.error('Failed to load:', errorCode, errorDescription);
+    });
 
     mainWindow.on('closed', () => {
         mainWindow = null;
@@ -197,8 +208,10 @@ const handleProtocolUrl = (url) => {
 };
 
 const gotTheLock = app.requestSingleInstanceLock();
+console.log('Single instance lock acquired:', gotTheLock);
 
 if (!gotTheLock) {
+    console.log('Another instance is running, quitting...');
     app.quit();
 } else {
     app.on('second-instance', (_event, commandLine) => {
@@ -213,35 +226,53 @@ if (!gotTheLock) {
     });
 
     app.whenReady().then(async () => {
-        registerProtocol();
+        try {
+            console.log('App ready, starting initialization...');
+            registerProtocol();
 
-        // Set up database folder in userData (OS-level secure location)
-        const dbFolder = path.join(app.getPath('userData'), 'database');
-        if (!fs.existsSync(dbFolder)) {
-            fs.mkdirSync(dbFolder, { recursive: true });
-        }
-        const dbFilePath = path.join(dbFolder, 'app.db');
-        setSqlitePath(dbFilePath, dbFolder);
-
-        // Initialize database
-        await initializeDatabase();
-
-        await authController.initialize();
-        registerAuthHandlers();
-        registerItemHandlers();
-        createWindow();
-        autoUpdateService.initialize();
-
-        const protocolUrl = process.argv.find((arg) => arg.startsWith(`${PROTOCOL_SCHEME}://`));
-        if (protocolUrl) {
-            setTimeout(() => handleProtocolUrl(protocolUrl), 500);
-        }
-
-        app.on('activate', () => {
-            if (BrowserWindow.getAllWindows().length === 0) {
-                createWindow();
+            // Set up database folder in userData (OS-level secure location)
+            const dbFolder = path.join(app.getPath('userData'), 'database');
+            console.log('Database folder:', dbFolder);
+            if (!fs.existsSync(dbFolder)) {
+                fs.mkdirSync(dbFolder, { recursive: true });
             }
-        });
+            const dbFilePath = path.join(dbFolder, 'app.db');
+            setSqlitePath(dbFilePath, dbFolder);
+
+            // Initialize database
+            console.log('Initializing database...');
+            await initializeDatabase();
+            console.log('Database initialized');
+
+            console.log('Initializing auth controller...');
+            await authController.initialize();
+            console.log('Auth controller initialized');
+
+            registerAuthHandlers();
+            registerItemHandlers();
+
+            console.log('Creating window...');
+            createWindow();
+            console.log('Window created');
+
+            autoUpdateService.initialize();
+
+            const protocolUrl = process.argv.find((arg) => arg.startsWith(`${PROTOCOL_SCHEME}://`));
+            if (protocolUrl) {
+                setTimeout(() => handleProtocolUrl(protocolUrl), 500);
+            }
+
+            app.on('activate', () => {
+                if (BrowserWindow.getAllWindows().length === 0) {
+                    createWindow();
+                }
+            });
+        } catch (error) {
+            console.error('FATAL ERROR during startup:', error);
+            const { dialog } = require('electron');
+            dialog.showErrorBox('Startup Error', `Failed to start application:\n\n${error.message}\n\n${error.stack}`);
+            app.quit();
+        }
     });
 
     app.on('window-all-closed', () => {

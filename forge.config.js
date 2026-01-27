@@ -1,10 +1,41 @@
+const path = require('node:path');
+const fs = require('node:fs/promises');
 const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
+
+async function copyDependency(buildPath, moduleName, visited = new Set()) {
+  if (visited.has(moduleName)) return;
+  visited.add(moduleName);
+
+  const source = path.resolve(__dirname, 'node_modules', moduleName);
+  try {
+    await fs.access(source);
+  } catch (error) {
+    if (error?.code === 'ENOENT') return;
+    throw error;
+  }
+
+  const destination = path.resolve(buildPath, 'node_modules', moduleName);
+  await fs.rm(destination, { recursive: true, force: true });
+  await fs.mkdir(path.dirname(destination), { recursive: true });
+  await fs.cp(source, destination, { recursive: true });
+
+  try {
+    const pkgJson = await fs.readFile(path.join(source, 'package.json'), 'utf8');
+    const pkg = JSON.parse(pkgJson);
+    const deps = Object.keys(pkg.dependencies || {});
+    for (const dep of deps) {
+      await copyDependency(buildPath, dep, visited);
+    }
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+}
 
 module.exports = {
   packagerConfig: {
     asar: true,
-    // Bundle .env file with the app (for production)
+    asarUnpack: ['**/node_modules/sqlite3/**', '**/node_modules/sequelize/**', '**/node_modules/keytar/**', '**/node_modules/tedious/**'],
     extraResource: ['.env'],
     // Register custom protocol for OAuth redirect
     protocols: [
@@ -15,6 +46,19 @@ module.exports = {
     ],
   },
   rebuildConfig: {},
+  hooks: {
+    async packageAfterCopy(_, buildPath) {
+      // Ensure native ORM dependencies ship inside the packaged app
+      console.log('Copying native modules to:', buildPath);
+      await Promise.all([
+        copyDependency(buildPath, 'sequelize'),
+        copyDependency(buildPath, 'sqlite3'),
+        copyDependency(buildPath, 'keytar'),
+        copyDependency(buildPath, 'tedious'),
+      ]);
+      console.log('Native modules copied successfully');
+    },
+  },
   makers: [
     {
       name: '@electron-forge/maker-squirrel',
@@ -38,7 +82,7 @@ module.exports = {
       name: '@electron-forge/publisher-github',
       config: {
         repository: {
-          owner: 'venkat-3010', // TODO: Replace with your GitHub username
+          owner: 'venkat-3010',
           name: 'electron-new',
         },
         prerelease: false,
@@ -49,7 +93,9 @@ module.exports = {
   plugins: [
     {
       name: '@electron-forge/plugin-auto-unpack-natives',
-      config: {},
+      config: {
+        packagedModules: ['sqlite3', 'keytar'],
+      },
     },
     {
       name: '@electron-forge/plugin-webpack',
@@ -79,7 +125,7 @@ module.exports = {
       [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
       [FuseV1Options.EnableNodeCliInspectArguments]: false,
       [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
-      [FuseV1Options.OnlyLoadAppFromAsar]: true,
+      [FuseV1Options.OnlyLoadAppFromAsar]: false,
     }),
   ],
 };
