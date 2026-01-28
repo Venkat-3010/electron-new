@@ -3,11 +3,10 @@ const fs = require('node:fs/promises');
 const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 
-/**
- * Copy a module and its dependencies to the build path
- * Uses a shared visited set to prevent duplicate copies and race conditions
- */
-async function copyDependency(buildPath, moduleName, visited) {
+// Shared visited set to prevent race conditions when copying shared dependencies
+const globalVisited = new Set();
+
+async function copyDependency(buildPath, moduleName, visited = globalVisited) {
   if (visited.has(moduleName)) return;
   visited.add(moduleName);
 
@@ -21,14 +20,13 @@ async function copyDependency(buildPath, moduleName, visited) {
 
   const destination = path.resolve(buildPath, 'node_modules', moduleName);
 
-  // Try to remove existing directory with retry logic for race conditions
+  // Retry logic for race conditions
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       await fs.rm(destination, { recursive: true, force: true });
       break;
     } catch (error) {
       if (error?.code === 'ENOTEMPTY' && attempt < 2) {
-        // Wait a bit and retry
         await new Promise(resolve => setTimeout(resolve, 100));
         continue;
       }
@@ -51,25 +49,16 @@ async function copyDependency(buildPath, moduleName, visited) {
   }
 }
 
-/**
- * Copy all native modules sequentially with a shared visited set
- * This prevents race conditions when modules share dependencies
- */
-async function copyNativeModules(buildPath) {
-  const visited = new Set();
-  const modules = ['sequelize', 'sqlite3', 'keytar', 'tedious'];
-
-  for (const moduleName of modules) {
-    await copyDependency(buildPath, moduleName, visited);
-  }
-}
-
 module.exports = {
   packagerConfig: {
     asar: true,
-    asarUnpack: ['**/node_modules/sqlite3/**', '**/node_modules/sequelize/**', '**/node_modules/keytar/**', '**/node_modules/tedious/**'],
+    asarUnpack: [
+      '**/node_modules/sqlite3/**',
+      '**/node_modules/sequelize/**',
+      '**/node_modules/keytar/**',
+      '**/node_modules/tedious/**',
+    ],
     extraResource: ['.env'],
-    // Register custom protocol for OAuth redirect
     protocols: [
       {
         name: 'MSAL Auth Protocol',
@@ -80,10 +69,17 @@ module.exports = {
   rebuildConfig: {},
   hooks: {
     async packageAfterCopy(_, buildPath) {
-      // Ensure native ORM dependencies ship inside the packaged app
-      // Run sequentially with shared visited set to avoid race conditions
+      // Reset visited set for each build
+      globalVisited.clear();
+
       console.log('Copying native modules to:', buildPath);
-      await copyNativeModules(buildPath);
+
+      // Copy sequentially to avoid race conditions with shared dependencies
+      await copyDependency(buildPath, 'sequelize');
+      await copyDependency(buildPath, 'sqlite3');
+      await copyDependency(buildPath, 'keytar');
+      await copyDependency(buildPath, 'tedious');
+
       console.log('Native modules copied successfully');
     },
   },
@@ -122,7 +118,7 @@ module.exports = {
     {
       name: '@electron-forge/plugin-auto-unpack-natives',
       config: {
-        packagedModules: ['sqlite3', 'keytar'],
+        packagedModules: ['sqlite3', 'keytar', 'tedious'],
       },
     },
     {
@@ -144,8 +140,6 @@ module.exports = {
         },
       },
     },
-    // Fuses are used to enable/disable various Electron functionality
-    // at package time, before code signing the application
     new FusesPlugin({
       version: FuseVersion.V1,
       [FuseV1Options.RunAsNode]: false,

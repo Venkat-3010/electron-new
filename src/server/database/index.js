@@ -54,44 +54,18 @@ const initializeSqlite = async () => {
 
 /**
  * Check if tedious (MSSQL driver) is available
- * In packaged Electron apps, native modules may not be properly resolved
- * We try multiple resolution strategies
+ * Returns true if tedious can be loaded, false otherwise
  */
 const isTediousAvailable = () => {
-    // Strategy 1: Try normal require
     try {
         require('tedious');
-        console.log('Tedious loaded via standard require');
+        console.log('Tedious module available');
         return true;
     } catch (error) {
-        console.warn('Standard tedious require failed:', error.message);
+        console.warn('Tedious module not available:', error.message);
+        console.log('MSSQL will be disabled - app will use SQLite only');
+        return false;
     }
-
-    // Strategy 2: Try loading from app.asar.unpacked (Electron unpacked modules)
-    try {
-        const path = require('path');
-        const { app } = require('electron');
-
-        if (app && app.isPackaged) {
-            // In packaged app, try the unpacked location
-            const unpackedPath = path.join(
-                path.dirname(app.getPath('exe')),
-                'resources',
-                'app.asar.unpacked',
-                'node_modules',
-                'tedious'
-            );
-            console.log('Trying unpacked tedious path:', unpackedPath);
-            require(unpackedPath);
-            console.log('Tedious loaded from unpacked path');
-            return true;
-        }
-    } catch (error) {
-        console.warn('Unpacked tedious require failed:', error.message);
-    }
-
-    console.log('Tedious not available - MSSQL will be disabled');
-    return false;
 };
 
 /**
