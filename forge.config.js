@@ -3,7 +3,11 @@ const fs = require('node:fs/promises');
 const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 
-async function copyDependency(buildPath, moduleName, visited = new Set()) {
+/**
+ * Copy a module and its dependencies to the build path
+ * Uses a shared visited set to prevent duplicate copies and race conditions
+ */
+async function copyDependency(buildPath, moduleName, visited) {
   if (visited.has(moduleName)) return;
   visited.add(moduleName);
 
@@ -16,7 +20,22 @@ async function copyDependency(buildPath, moduleName, visited = new Set()) {
   }
 
   const destination = path.resolve(buildPath, 'node_modules', moduleName);
-  await fs.rm(destination, { recursive: true, force: true });
+
+  // Try to remove existing directory with retry logic for race conditions
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await fs.rm(destination, { recursive: true, force: true });
+      break;
+    } catch (error) {
+      if (error?.code === 'ENOTEMPTY' && attempt < 2) {
+        // Wait a bit and retry
+        await new Promise(resolve => setTimeout(resolve, 100));
+        continue;
+      }
+      if (error?.code !== 'ENOENT') throw error;
+    }
+  }
+
   await fs.mkdir(path.dirname(destination), { recursive: true });
   await fs.cp(source, destination, { recursive: true });
 
@@ -29,6 +48,19 @@ async function copyDependency(buildPath, moduleName, visited = new Set()) {
     }
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
+  }
+}
+
+/**
+ * Copy all native modules sequentially with a shared visited set
+ * This prevents race conditions when modules share dependencies
+ */
+async function copyNativeModules(buildPath) {
+  const visited = new Set();
+  const modules = ['sequelize', 'sqlite3', 'keytar', 'tedious'];
+
+  for (const moduleName of modules) {
+    await copyDependency(buildPath, moduleName, visited);
   }
 }
 
@@ -49,13 +81,9 @@ module.exports = {
   hooks: {
     async packageAfterCopy(_, buildPath) {
       // Ensure native ORM dependencies ship inside the packaged app
+      // Run sequentially with shared visited set to avoid race conditions
       console.log('Copying native modules to:', buildPath);
-      await Promise.all([
-        copyDependency(buildPath, 'sequelize'),
-        copyDependency(buildPath, 'sqlite3'),
-        copyDependency(buildPath, 'keytar'),
-        copyDependency(buildPath, 'tedious'),
-      ]);
+      await copyNativeModules(buildPath);
       console.log('Native modules copied successfully');
     },
   },
