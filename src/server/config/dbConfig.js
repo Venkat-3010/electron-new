@@ -42,15 +42,28 @@ const getSqliteConfig = () => ({
 });
 
 /**
+ * Default MSSQL configuration values
+ * These are used when environment variables are not set
+ */
+const MSSQL_DEFAULTS = {
+    host: 'electron-db.database.windows.net',
+    database: 'electron_crud_db',
+    username: 'electronAdmin',
+    password: 'Test@123',
+    port: 1433,
+};
+
+/**
  * Get MSSQL configuration (remote online database)
+ * Uses environment variables with fallback to defaults
  */
 const getMssqlConfig = () => ({
-    database: process.env.DB_NAME || 'electron_crud_db',
-    username: process.env.DB_USER || '',
-    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || MSSQL_DEFAULTS.database,
+    username: process.env.DB_USER || MSSQL_DEFAULTS.username,
+    password: process.env.DB_PASSWORD || MSSQL_DEFAULTS.password,
     dialect: 'mssql',
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT, 10) || 1433,
+    host: process.env.DB_HOST || MSSQL_DEFAULTS.host,
+    port: parseInt(process.env.DB_PORT, 10) || MSSQL_DEFAULTS.port,
     logging: process.env.NODE_ENV === 'development' ? console.log : false,
     dialectOptions: {
         options: {
@@ -71,10 +84,13 @@ const getMssqlConfig = () => ({
 });
 
 /**
- * Check if MSSQL is configured
+ * Check if MSSQL is configured for remote connection
+ * Returns true if host is set to something other than localhost
  */
 const isMssqlConfigured = () => {
-    return !!(process.env.DB_HOST && process.env.DB_USER && process.env.DB_PASSWORD);
+    const host = process.env.DB_HOST || MSSQL_DEFAULTS.host;
+    // Consider configured if host is not localhost (i.e., pointing to remote server)
+    return host !== 'localhost';
 };
 
 module.exports = {

@@ -41,8 +41,8 @@ const initializeSqlite = async () => {
         SqliteItem = defineItemModel(sqliteSequelize, { forMssql: false });
         SqliteSession = defineSessionModel(sqliteSequelize);
 
-        // Sync tables
-        await sqliteSequelize.sync({ force: true });
+        // Sync tables (use alter to preserve existing data while updating schema)
+        await sqliteSequelize.sync({ alter: true });
         console.log('SQLite synchronized');
 
         return sqliteSequelize;
@@ -57,31 +57,34 @@ const initializeSqlite = async () => {
  */
 const initializeMssql = async () => {
     console.log('Checking MSSQL configuration...');
-    console.log('DB_HOST:', process.env.DB_HOST);
-    console.log('DB_USER:', process.env.DB_USER);
-    console.log('DB_NAME:', process.env.DB_NAME);
+    console.log('DB_HOST:', process.env.DB_HOST || '(not set - will use default)');
+    console.log('DB_USER:', process.env.DB_USER || '(not set - will use default)');
+    console.log('DB_NAME:', process.env.DB_NAME || '(not set - will use default)');
 
-    if (!isMssqlConfigured()) {
-        console.log('MSSQL not configured - skipping (need DB_HOST, DB_USER, and DB_PASSWORD)');
+    // Get configuration (uses defaults if env vars not set)
+    const config = getMssqlConfig();
+
+    // Skip if host is localhost (means not configured for remote)
+    if (config.host === 'localhost') {
+        console.log('MSSQL host is localhost - skipping remote database connection');
         return null;
     }
-
-    const config = getMssqlConfig();
 
     console.log('Initializing MSSQL database...');
     console.log('MSSQL Host:', config.host);
     console.log('MSSQL Port:', config.port);
     console.log('MSSQL Database:', config.database);
+    console.log('MSSQL User:', config.username);
 
     mssqlSequelize = new Sequelize(
-        'electron_crud_db',
-        'electronAdmin',
-        'Test@123',
+        config.database,
+        config.username,
+        config.password,
         {
             dialect: 'mssql',
-            host: 'electron-db.database.windows.net',
-            port: 1433,
-            logging: process.env.NODE_ENV === 'development' ? console.log : false,
+            host: config.host,
+            port: config.port,
+            logging: config.logging,
             dialectOptions: {
                 options: {
                     encrypt: true,
@@ -90,6 +93,7 @@ const initializeMssql = async () => {
                     connectionTimeout: 30000,
                 },
             },
+            pool: config.pool,
         }
     );
 
@@ -101,8 +105,11 @@ const initializeMssql = async () => {
         MssqlItem = defineItemModel(mssqlSequelize, { forMssql: true });
         MssqlSession = defineSessionModel(mssqlSequelize);
 
-        // Sync tables
-        await mssqlSequelize.sync({ force: true });
+        // Sync tables for MSSQL
+        // Note: MSSQL doesn't support ALTER COLUMN with UNIQUE constraint
+        // Use force: false to create tables if they don't exist, without altering
+        // For schema changes, use migrations or manually update the database
+        await mssqlSequelize.sync({ force: false });
         console.log('MSSQL synchronized');
 
         mssqlConnected = true;

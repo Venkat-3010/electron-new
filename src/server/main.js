@@ -1,21 +1,38 @@
 const path = require('node:path');
+const { app, BrowserWindow, net, ipcMain } = require('electron');
 
 // Load environment variables from .env file
-// In development, the .env is at project root
-// In production, it should be in the app's resources or userData
-const envPath = process.env.NODE_ENV === 'production'
-    ? path.join(process.resourcesPath, '.env')
-    : path.join(__dirname, '../../.env');
-require('dotenv').config({ path: envPath });
+// Must handle both packaged (production) and unpackaged (development) scenarios
+const loadEnvConfig = () => {
+    let envPath;
 
-// Fallback: try loading from current working directory
-if (!process.env.DB_HOST) {
-    require('dotenv').config();
-}
+    if (app.isPackaged) {
+        // Production: .env is in resources folder (via extraResource in forge.config.js)
+        envPath = path.join(process.resourcesPath, '.env');
+    } else {
+        // Development: .env is at project root
+        envPath = path.join(__dirname, '../../.env');
+    }
 
-console.log('Environment loaded - DB_HOST:', process.env.DB_HOST);
+    console.log('Loading .env from:', envPath);
+    const result = require('dotenv').config({ path: envPath });
 
-const { app, BrowserWindow, net, ipcMain } = require('electron');
+    if (result.error) {
+        console.warn('Failed to load .env from:', envPath, result.error.message);
+        // Fallback: try loading from current working directory
+        console.log('Trying fallback .env location...');
+        require('dotenv').config();
+    }
+
+    console.log('Environment loaded:');
+    console.log('  - DB_HOST:', process.env.DB_HOST || '(not set)');
+    console.log('  - DB_NAME:', process.env.DB_NAME || '(not set)');
+    console.log('  - DB_USER:', process.env.DB_USER || '(not set)');
+    console.log('  - NODE_ENV:', process.env.NODE_ENV || '(not set)');
+};
+
+// Load env config immediately
+loadEnvConfig();
 const fs = require('node:fs');
 const { PROTOCOL_SCHEME } = require('./config/msalConfig');
 const { setSqlitePath } = require('./config/dbConfig');
