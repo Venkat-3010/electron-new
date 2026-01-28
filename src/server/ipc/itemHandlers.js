@@ -5,7 +5,7 @@
 const { ipcMain } = require('electron');
 const itemController = require('../controllers/itemController');
 const syncService = require('../services/syncService');
-const { isMssqlConnected, connectMssql } = require('../database');
+const { isMssqlConnected, connectMssql, getMssqlUnavailableReason } = require('../database');
 
 function registerItemHandlers() {
     // Get all items
@@ -49,15 +49,23 @@ function registerItemHandlers() {
         try {
             // Try to connect to MSSQL if not connected
             if (!isMssqlConnected()) {
+                console.log('MSSQL not connected, attempting to connect...');
                 await connectMssql();
             }
 
             if (!isMssqlConnected()) {
-                return { success: false, reason: 'mssql_not_configured' };
+                const reason = getMssqlUnavailableReason() || 'unknown';
+                console.log('MSSQL connection failed. Reason:', reason);
+                return {
+                    success: false,
+                    reason: 'mssql_not_available',
+                    details: reason
+                };
             }
 
             return await syncService.fullSync();
         } catch (error) {
+            console.error('Sync trigger error:', error);
             return { success: false, error: error.message };
         }
     });

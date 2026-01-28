@@ -2,17 +2,22 @@
  * Database Configuration for Hybrid SQLite + MSSQL
  *
  * Architecture:
- * - SQLite: Local offline storage (always available)
+ * - SQLite: Local offline storage (always available) with SQLCipher encryption
  * - MSSQL: Remote server storage (sync when online)
  *
  * Data flow:
  * - All CRUD operations happen on SQLite first (offline-first)
  * - When online, data syncs to MSSQL
+ * 
+ * Security:
+ * - SQLite database is encrypted using SQLCipher (AES-256)
+ * - Encryption key is stored securely in Windows Credential Manager via keytar
  */
 
 // SQLite config - path will be set at runtime from main.js
 let sqlitePath = null;
 let dbFolderPath = null;
+let encryptionKey = null;
 
 /**
  * Set the SQLite database file path
@@ -24,15 +29,30 @@ const setSqlitePath = (filePath, folderPath) => {
 };
 
 /**
+ * Set the encryption key for SQLite database
+ * Called from main.js after retrieving from keytar
+ */
+const setEncryptionKey = (key) => {
+    encryptionKey = key;
+};
+
+/**
+ * Get the encryption key
+ */
+const getEncryptionKey = () => encryptionKey;
+
+/**
  * Get the database folder path (for console logging)
  */
 const getDbFolderPath = () => dbFolderPath;
 
 /**
- * Get SQLite configuration (local offline database)
+ * Get SQLite configuration with SQLCipher encryption (local offline database)
+ * Uses @journeyapps/sqlcipher as the dialect module for encryption support
  */
 const getSqliteConfig = () => ({
     dialect: 'sqlite',
+    dialectModulePath: '@journeyapps/sqlcipher',
     storage: sqlitePath,
     logging: process.env.NODE_ENV === 'development' ? console.log : false,
     define: {
@@ -95,6 +115,8 @@ const isMssqlConfigured = () => {
 
 module.exports = {
     setSqlitePath,
+    setEncryptionKey,
+    getEncryptionKey,
     getDbFolderPath,
     getSqliteConfig,
     getMssqlConfig,

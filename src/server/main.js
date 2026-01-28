@@ -35,7 +35,8 @@ const loadEnvConfig = () => {
 loadEnvConfig();
 const fs = require('node:fs');
 const { PROTOCOL_SCHEME } = require('./config/msalConfig');
-const { setSqlitePath } = require('./config/dbConfig');
+const { setSqlitePath, setEncryptionKey } = require('./config/dbConfig');
+const { getOrCreateEncryptionKey } = require('./utils/encryptionKeyManager');
 const { initializeDatabase, connectMssql, disconnectMssql, isMssqlConnected } = require('./database');
 const authController = require('./controllers/authController');
 const { registerAuthHandlers } = require('./ipc/authHandlers');
@@ -256,10 +257,16 @@ if (!gotTheLock) {
             const dbFilePath = path.join(dbFolder, 'app.db');
             setSqlitePath(dbFilePath, dbFolder);
 
-            // Initialize database
-            console.log('Initializing database...');
+            // Get or create encryption key from secure storage (Windows Credential Manager)
+            console.log('Retrieving database encryption key from secure storage...');
+            const encryptionKey = await getOrCreateEncryptionKey();
+            setEncryptionKey(encryptionKey);
+            console.log('Encryption key ready');
+
+            // Initialize encrypted database
+            console.log('Initializing encrypted database...');
             await initializeDatabase();
-            console.log('Database initialized');
+            console.log('Encrypted database initialized');
 
             console.log('Initializing auth controller...');
             await authController.initialize();

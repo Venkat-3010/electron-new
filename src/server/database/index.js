@@ -7,7 +7,7 @@
  */
 
 const { Sequelize } = require('sequelize');
-const { getSqliteConfig, getMssqlConfig, getDbFolderPath, isMssqlConfigured } = require('../config/dbConfig');
+const { getSqliteConfig, getMssqlConfig, getDbFolderPath, getEncryptionKey, isMssqlConfigured } = require('../config/dbConfig');
 const { defineItemModel } = require('./models/Item');
 const { defineSessionModel } = require('./models/Session');
 
@@ -23,19 +23,52 @@ let MssqlSession = null;
 let mssqlConnected = false;
 
 /**
- * Initialize SQLite database (always available)
+ * Initialize SQLite database with encryption (always available)
+ * Uses SQLCipher for AES-256 encryption
+ * Handles migration from unencrypted databases automatically
  */
 const initializeSqlite = async () => {
     const config = getSqliteConfig();
+    const encryptionKey = getEncryptionKey();
 
-    console.log('Initializing SQLite database...');
+    console.log('Initializing encrypted SQLite database...');
     console.log('Database folder:', getDbFolderPath());
+
+    if (!encryptionKey) {
+        throw new Error('Encryption key not set. Call setEncryptionKey before initializing database.');
+    }
+
+    // Check if we need to migrate an existing unencrypted database
+    const { prepareDatabaseForEncryption } = require('../utils/databaseMigration');
+    const migrationResult = await prepareDatabaseForEncryption(config.storage, encryptionKey);
+
+    if (migrationResult.wasMigrated) {
+        console.log('Database migration completed successfully');
+    }
 
     sqliteSequelize = new Sequelize(config);
 
     try {
         await sqliteSequelize.authenticate();
         console.log('SQLite connection established');
+
+        // Apply encryption key using PRAGMA
+        // This must be done before any other database operations
+        await sqliteSequelize.query(`PRAGMA key = '${encryptionKey}'`);
+        console.log('SQLite encryption key applied');
+
+        // Set SQLCipher settings for optimal security
+        // Use SQLCipher 4 defaults (if using SQLCipher 4.x)
+        await sqliteSequelize.query(`PRAGMA cipher_compatibility = 4`);
+
+        // Verify encryption is working by querying the database
+        try {
+            await sqliteSequelize.query(`SELECT count(*) FROM sqlite_master`);
+            console.log('SQLite encryption verified successfully');
+        } catch (verifyError) {
+            console.error('SQLite encryption verification failed:', verifyError.message);
+            throw new Error('Database encryption verification failed. The encryption key may be incorrect.');
+        }
 
         // Define models for SQLite
         SqliteItem = defineItemModel(sqliteSequelize, { forMssql: false });
@@ -52,35 +85,19 @@ const initializeSqlite = async () => {
     }
 };
 
+// Track why MSSQL is not available for better error messages
+let mssqlUnavailableReason = null;
+
 /**
- * Check if tedious (MSSQL driver) is available
- * Returns true if tedious can be loaded, false otherwise
+ * Get the reason MSSQL is unavailable
  */
-const isTediousAvailable = () => {
-    try {
-        require('tedious');
-        console.log('Tedious module available');
-        return true;
-    } catch (error) {
-        console.warn('Tedious module not available:', error.message);
-        console.log('MSSQL will be disabled - app will use SQLite only');
-        return false;
-    }
-};
+const getMssqlUnavailableReason = () => mssqlUnavailableReason;
 
 /**
  * Initialize MSSQL database (when online and configured)
  */
 const initializeMssql = async () => {
     console.log('Checking MSSQL configuration...');
-
-    // First check if tedious driver is available
-    if (!isTediousAvailable()) {
-        console.log('MSSQL driver (tedious) not available - skipping MSSQL connection');
-        console.log('App will continue with SQLite only (offline mode)');
-        return null;
-    }
-
     console.log('DB_HOST:', process.env.DB_HOST || '(not set - will use default)');
     console.log('DB_USER:', process.env.DB_USER || '(not set - will use default)');
     console.log('DB_NAME:', process.env.DB_NAME || '(not set - will use default)');
@@ -88,8 +105,14 @@ const initializeMssql = async () => {
     // Get configuration (uses defaults if env vars not set)
     const config = getMssqlConfig();
 
+    console.log('Resolved MSSQL config:');
+    console.log('  Host:', config.host);
+    console.log('  Database:', config.database);
+    console.log('  User:', config.username);
+
     // Skip if host is localhost (means not configured for remote)
     if (config.host === 'localhost') {
+        mssqlUnavailableReason = 'host_is_localhost';
         console.log('MSSQL host is localhost - skipping remote database connection');
         return null;
     }
@@ -137,10 +160,24 @@ const initializeMssql = async () => {
         console.log('MSSQL synchronized');
 
         mssqlConnected = true;
+        mssqlUnavailableReason = null;
         return mssqlSequelize;
     } catch (error) {
         console.error('MSSQL initialization failed:', error.message);
         console.error('MSSQL error details:', error.original?.message || error);
+        console.error('Full error:', error);
+
+        // Track specific reason for failure
+        if (error.message?.includes('tedious')) {
+            mssqlUnavailableReason = 'tedious_not_found';
+        } else if (error.message?.includes('ECONNREFUSED') || error.message?.includes('connect')) {
+            mssqlUnavailableReason = 'connection_failed';
+        } else if (error.message?.includes('Login failed') || error.message?.includes('authentication')) {
+            mssqlUnavailableReason = 'auth_failed';
+        } else {
+            mssqlUnavailableReason = error.message;
+        }
+
         mssqlConnected = false;
         return null;
     }
@@ -256,5 +293,6 @@ module.exports = {
     getSqliteSessionModel,
     getMssqlSessionModel,
     isMssqlConnected,
+    getMssqlUnavailableReason,
     closeDatabase,
 };
