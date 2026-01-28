@@ -57,6 +57,8 @@ module.exports = {
       '**/node_modules/sequelize/**',
       '**/node_modules/keytar/**',
       '**/node_modules/tedious/**',
+      '**/node_modules/sqlcipher/**',
+      '**/node_modules/@journeyapps/sqlcipher/**',
     ],
     extraResource: ['.env'],
     protocols: [
@@ -79,6 +81,8 @@ module.exports = {
       await copyDependency(buildPath, 'sqlite3');
       await copyDependency(buildPath, 'keytar');
       await copyDependency(buildPath, 'tedious');
+      await copyDependency(buildPath, 'sqlcipher');
+      await copyDependency(buildPath, '@journeyapps/sqlcipher');
 
       console.log('Native modules copied successfully');
     },
