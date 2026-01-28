@@ -53,10 +53,60 @@ const initializeSqlite = async () => {
 };
 
 /**
+ * Check if tedious (MSSQL driver) is available
+ * In packaged Electron apps, native modules may not be properly resolved
+ * We try multiple resolution strategies
+ */
+const isTediousAvailable = () => {
+    // Strategy 1: Try normal require
+    try {
+        require('tedious');
+        console.log('Tedious loaded via standard require');
+        return true;
+    } catch (error) {
+        console.warn('Standard tedious require failed:', error.message);
+    }
+
+    // Strategy 2: Try loading from app.asar.unpacked (Electron unpacked modules)
+    try {
+        const path = require('path');
+        const { app } = require('electron');
+
+        if (app && app.isPackaged) {
+            // In packaged app, try the unpacked location
+            const unpackedPath = path.join(
+                path.dirname(app.getPath('exe')),
+                'resources',
+                'app.asar.unpacked',
+                'node_modules',
+                'tedious'
+            );
+            console.log('Trying unpacked tedious path:', unpackedPath);
+            require(unpackedPath);
+            console.log('Tedious loaded from unpacked path');
+            return true;
+        }
+    } catch (error) {
+        console.warn('Unpacked tedious require failed:', error.message);
+    }
+
+    console.log('Tedious not available - MSSQL will be disabled');
+    return false;
+};
+
+/**
  * Initialize MSSQL database (when online and configured)
  */
 const initializeMssql = async () => {
     console.log('Checking MSSQL configuration...');
+
+    // First check if tedious driver is available
+    if (!isTediousAvailable()) {
+        console.log('MSSQL driver (tedious) not available - skipping MSSQL connection');
+        console.log('App will continue with SQLite only (offline mode)');
+        return null;
+    }
+
     console.log('DB_HOST:', process.env.DB_HOST || '(not set - will use default)');
     console.log('DB_USER:', process.env.DB_USER || '(not set - will use default)');
     console.log('DB_NAME:', process.env.DB_NAME || '(not set - will use default)');
