@@ -74,13 +74,13 @@ const initializeMssql = async () => {
     console.log('MSSQL Database:', config.database);
 
     mssqlSequelize = new Sequelize(
-        process.env.DB_NAME || 'electron_crud_db',
-        process.env.DB_USER || '',
-        process.env.DB_PASSWORD || '',
+        'electron_crud_db',
+        'electronAdmin',
+        'Test@123',
         {
             dialect: 'mssql',
-            host: process.env.DB_HOST || 'localhost',
-            port: parseInt(process.env.DB_PORT, 10) || 1433,
+            host: 'electron-db.database.windows.net',
+            port: 1433,
             logging: process.env.NODE_ENV === 'development' ? console.log : false,
             dialectOptions: {
                 options: {
