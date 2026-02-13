@@ -59,6 +59,7 @@ module.exports = {
       '**/node_modules/tedious/**',
       '**/node_modules/sqlcipher/**',
       '**/node_modules/@journeyapps/sqlcipher/**',
+      '**/node_modules/@mapbox/node-pre-gyp/**',
     ],
     extraResource: ['.env'],
     protocols: [
@@ -83,6 +84,7 @@ module.exports = {
       await copyDependency(buildPath, 'tedious');
       await copyDependency(buildPath, 'sqlcipher');
       await copyDependency(buildPath, '@journeyapps/sqlcipher');
+      await copyDependency(buildPath, '@mapbox/node-pre-gyp');
 
       console.log('Native modules copied successfully');
     },
@@ -122,7 +124,7 @@ module.exports = {
     {
       name: '@electron-forge/plugin-auto-unpack-natives',
       config: {
-        packagedModules: ['sqlite3', 'keytar', 'tedious'],
+        packagedModules: ['sqlite3', 'keytar', 'tedious', '@journeyapps/sqlcipher'],
       },
     },
     {
