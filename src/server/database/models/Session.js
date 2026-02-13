@@ -8,7 +8,7 @@
 const { DataTypes } = require('sequelize');
 const crypto = require('crypto');
 
-const MAX_CONCURRENT_SESSIONS = 3;
+const MAX_CONCURRENT_SESSIONS = 1;
 
 const defineSessionModel = (sequelize) => {
     const Session = sequelize.define('Session', {
